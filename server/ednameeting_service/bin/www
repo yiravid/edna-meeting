@@ -1,0 +1,145 @@
+#!/usr/bin/env node
+
+/**
+ * Module dependencies.
+ */
+
+var app = require('../app');
+var debug = require('debug')('ednameeting_service:server');
+var http = require('http');
+
+/**
+ * Get port from environment and store in Express.
+ */
+
+var port = normalizePort(process.env.PORT || '3000');
+app.set('port', port);
+
+/**
+ * Create HTTP server.
+ */
+
+var server = http.createServer(app);
+
+/**
+ * add Socket
+ */
+
+var io = require('socket.io')(server);
+
+// keep an array of users connected to the meeting
+users = [];
+connections = []
+counter = users.length;
+
+// io connection
+io.on('connection', function(socket){
+
+  connections.push(socket);
+  console.log('Connected: %s sockets connected', connections.length);
+  app.set('socketio', socket);
+
+  // client connects
+  socket.emit('welcome', {
+    msg: "Welcome to Edna-Meeting! Let's start your meeting.",
+    timestamp: new Date()
+  });
+
+  // user connects
+  socket.on('user-connected', function(data, fn) {
+    counter++;
+
+    users.push({
+      name: data.name + counter,
+      connected: data.ts
+    });
+
+    console.log('current Users:', users);
+    user = users[users.length-1];
+    console.log('%s joined on: %s', user.name, user.connected);
+    fn('We are happy to have you ' + user.name);
+    //socket.emit('start-meeting', {users: users, });
+  });
+
+  // when client starts meeting
+  socket.on('user-started-meeting', function (data, fn) {
+    console.log('Meeting in room %s is in session now!', data.room.name);
+    lastUser = users[users.length-1];
+    fn(lastUser, data.room);
+  });
+
+  // when client gets disconnected
+  socket.on('disconnect', function () {
+    connections.splice(connections.indexOf(socket), 1);
+    console.log('Disconnected: %s sockets connected', connections.length);
+  });
+});
+
+
+/**
+ * Listen on provided port, on all network interfaces.
+ */
+
+server.listen(port);
+server.on('error', onError);
+server.on('listening', onListening);
+
+/**
+ * Normalize a port into a number, string, or false.
+ */
+
+function normalizePort(val) {
+  var port = parseInt(val, 10);
+
+  if (isNaN(port)) {
+    // named pipe
+    return val;
+  }
+
+  if (port >= 0) {
+    // port number
+    return port;
+  }
+
+  return false;
+}
+
+/**
+ * Event listener for HTTP server "error" event.
+ */
+
+function onError(error) {
+  if (error.syscall !== 'listen') {
+    throw error;
+  }
+
+  var bind = typeof port === 'string'
+    ? 'Pipe ' + port
+    : 'Port ' + port;
+
+  // handle specific listen errors with friendly messages
+  switch (error.code) {
+    case 'EACCES':
+      console.error(bind + ' requires elevated privileges');
+      process.exit(1);
+      break;
+    case 'EADDRINUSE':
+      console.error(bind + ' is already in use');
+      process.exit(1);
+      break;
+    default:
+      throw error;
+  }
+}
+
+/**
+ * Event listener for HTTP server "listening" event.
+ */
+
+function onListening() {
+  var addr = server.address();
+  var bind = typeof addr === 'string'
+    ? 'pipe ' + addr
+    : 'port ' + addr.port;
+  debug('Listening on ' + bind);
+}
